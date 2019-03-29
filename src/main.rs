@@ -4,10 +4,6 @@ extern crate hyper;
 extern crate pretty_env_logger;
 extern crate url;
 #[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
-#[macro_use]
 extern crate fail;
 
 use futures::{future, Future, Stream};
@@ -18,28 +14,18 @@ use hyper::service::service_fn;
 static INDEX: &str = r#"Working. Try: curl http://localhost:8080/failpoints/index -XPUT -d'panic' "#;
 static MISSING_NAME: &[u8] = b"Missing param name";
 static MISSING_ACTIONS: &[u8] = b"Missing param actions";
-
-#[derive(Deserialize, Debug)]
-struct FailPoint {
-    name: String,
-    actions: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct FailPointDelete {
-    name: String,
-}
+static FAIL_POINTS_PATH: &str = "/failpoints/";
 
 // Using service_fn, we can turn this function into a `Service`.
 fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hyper::Error> + Send> {
     let uri = req.uri().to_string();
 
     // For path start with /failpoints/
-    if uri.starts_with("/failpoints/") {
+    if uri.starts_with(FAIL_POINTS_PATH) {
         return match req.method() {
             &Method::PUT => {
                 Box::new(req.into_body().concat2().map(move |chunk| {
-                    let (_, name) = uri.split_at("/failpoints/".len());
+                    let (_, name) = uri.split_at(FAIL_POINTS_PATH.len());
                     if name.is_empty() {
                         return Response::builder()
                             .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -67,7 +53,7 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                 }))
             },
             &Method::DELETE => {
-                let (_, name) = uri.split_at("/failpoints/".len());
+                let (_, name) = uri.split_at(FAIL_POINTS_PATH.len());
                 if name.is_empty() {
                     return Box::new(future::ok(Response::builder()
                         .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -80,7 +66,8 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                 Box::new(future::ok(Response::new(body.into())))
             },
             &Method::GET => {
-                let list: Vec<String> = fail::list().into_iter().map(move |(s1, s2)| format!("{}={}", s1, s2))
+                let list: Vec<String> = fail::list().into_iter()
+                    .map(move |(s1, s2)| format!("{}={}", s1, s2))
                     .collect();
 
                 let list = list.join("\n");
@@ -108,9 +95,9 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
             Box::new(future::ok(Response::new(INDEX.into())))
         },
         (&Method::GET, "/failpoints") => {
-            let list: Vec<String> = fail::list().into_iter().map(move |(s1, s2)| format!("{}={}", s1, s2))
+            let list: Vec<String> = fail::list().into_iter()
+                .map(move |(s1, s2)| format!("{}={}", s1, s2))
                 .collect();
-
             let list = list.join("\n");
             Box::new(future::ok(Response::builder()
                 .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -124,7 +111,6 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                 .unwrap()))
         }
     }
-
 }
 
 fn main() {
