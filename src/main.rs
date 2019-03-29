@@ -18,7 +18,7 @@ use hyper::service::service_fn;
 // use std::collections::HashMap;
 // use url::form_urlencoded;
 
-static INDEX: &str = r#"Working. Try: curl localhost:8080/fail -XPOST -d'{"name": "nice", "actions": "whatever"}'"#;
+static INDEX: &str = r#"Working. Try: curl localhost:8080/fail -XPOST -d'{"name": "index", "actions": "panic"}'"#;
 // static MISSING: &[u8] = b"Missing field";
 // static NOTNUMERIC: &[u8] = b"Number field is not numeric";
 
@@ -38,7 +38,7 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
 
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
-            fail_point!("get");
+            fail_point!("index");
             Box::new(future::ok(Response::new(INDEX.into())))
         },
         (&Method::GET, "/home") => {
