@@ -17,15 +17,16 @@ static MISSING_ACTIONS: &[u8] = b"Missing param actions";
 static FAIL_POINTS_PATH: &str = "/failpoints/";
 
 // Using service_fn, we can turn this function into a `Service`.
-fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hyper::Error> + Send> {
-    let uri = req.uri().to_string();
+fn param_example(req: Request<Body>) -> Box<dyn Future<Item=Response<Body>, Error=hyper::Error> + Send> {
+    let path = req.uri().path().to_owned();
+    let method = req.method().to_owned();
 
-    // For path start with /failpoints/
-    if uri.starts_with(FAIL_POINTS_PATH) {
-        return match req.method() {
-            &Method::PUT => {
+    // For paths start with /failpoints/
+    if path.starts_with(FAIL_POINTS_PATH) {
+        return match method {
+            Method::PUT => {
                 Box::new(req.into_body().concat2().map(move |chunk| {
-                    let (_, name) = uri.split_at(FAIL_POINTS_PATH.len());
+                    let (_, name) = path.split_at(FAIL_POINTS_PATH.len());
                     if name.is_empty() {
                         return Response::builder()
                             .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -42,7 +43,7 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                             .unwrap();
                     };
 
-                    if let Err(e) = fail::cfg(name.clone(), &actions) {
+                    if let Err(e) = fail::cfg(name.to_owned(), &actions) {
                         return Response::builder()
                             .status(StatusCode::BAD_REQUEST)
                             .body(e.to_string().into())
@@ -52,8 +53,8 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                     Response::new(body.into())
                 }))
             },
-            &Method::DELETE => {
-                let (_, name) = uri.split_at(FAIL_POINTS_PATH.len());
+            Method::DELETE => {
+                let (_, name) = path.split_at(FAIL_POINTS_PATH.len());
                 if name.is_empty() {
                     return Box::new(future::ok(Response::builder()
                         .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -65,7 +66,7 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
                 let body = format!("Delete fail point with name: {}", name);
                 Box::new(future::ok(Response::new(body.into())))
             },
-            &Method::GET => {
+            Method::GET => {
                 let list: Vec<String> = fail::list().into_iter()
                     .map(move |(s1, s2)| format!("{}={}", s1, s2))
                     .collect();
@@ -85,16 +86,16 @@ fn param_example(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=hy
         }
     }
 
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") => {
+    match (method, path.as_ref()) {
+        (Method::GET, "/") => {
             fail_point!("index");
             Box::new(future::ok(Response::new(INDEX.into())))
         },
-        (&Method::GET, "/home") => {
+        (Method::GET, "/home") => {
             fail_point!("home");
             Box::new(future::ok(Response::new(INDEX.into())))
         },
-        (&Method::GET, "/failpoints") => {
+        (Method::GET, "/failpoints") => {
             let list: Vec<String> = fail::list().into_iter()
                 .map(move |(s1, s2)| format!("{}={}", s1, s2))
                 .collect();
@@ -117,7 +118,6 @@ fn main() {
     pretty_env_logger::init();
 
     let addr = ([127, 0, 0, 1], 8080).into();
-
     let server = Server::bind(&addr)
         .serve(|| service_fn(param_example))
         .map_err(|e| eprintln!("server error: {}", e));
