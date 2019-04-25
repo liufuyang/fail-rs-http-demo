@@ -17,7 +17,7 @@ static MISSING_ACTIONS: &[u8] = b"Missing param actions";
 static FAIL_POINTS_PATH: &str = "/failpoints/";
 
 // Using service_fn, we can turn this function into a `Service`.
-fn param_example(req: Request<Body>) -> Box<dyn Future<Item=Response<Body>, Error=hyper::Error> + Send> {
+fn param_example(req: Request<Body>) -> impl Future<Item=Response<Body>, Error=hyper::Error> {
     let path = req.uri().path().to_owned();
     let method = req.method().to_owned();
     let is_on_failpoints: bool = path.starts_with(FAIL_POINTS_PATH);
@@ -25,14 +25,14 @@ fn param_example(req: Request<Body>) -> Box<dyn Future<Item=Response<Body>, Erro
     match (method, path.as_ref()) {
         (Method::GET, "/") => {
             fail_point!("index");
-            Box::new(future::ok(Response::new(INDEX.into())))
+            future::ok(Response::new(INDEX.into()))
         },
         (Method::GET, "/home") => {
             fail_point!("home");
-            Box::new(future::ok(Response::new(INDEX.into())))
+            future::ok(Response::new(INDEX.into()))
         },
         (Method::PUT, _) if is_on_failpoints => {
-            Box::new(req.into_body().concat2().map(move |chunk| {
+            req.into_body().concat2().map(move |chunk| {
                 let (_, name) = path.split_at(FAIL_POINTS_PATH.len());
                 if name.is_empty() {
                     return Response::builder()
@@ -58,7 +58,7 @@ fn param_example(req: Request<Body>) -> Box<dyn Future<Item=Response<Body>, Erro
                 }
                 let body = format!("Add fail point with name: {}, actions: {}", name, actions);
                 Response::new(body.into())
-            }))
+            })
         },
         (Method::DELETE, _) if is_on_failpoints => {
             let (_, name) = path.split_at(FAIL_POINTS_PATH.len());
@@ -71,23 +71,23 @@ fn param_example(req: Request<Body>) -> Box<dyn Future<Item=Response<Body>, Erro
 
             fail::remove(name);
             let body = format!("Delete fail point with name: {}", name);
-            Box::new(future::ok(Response::new(body.into())))
+            future::ok(Response::new(body.into()))
         },
         (Method::GET, _) if is_on_failpoints || path.starts_with("/failpoints")=> {
             let list: Vec<String> = fail::list().into_iter()
                 .map(move |(s1, s2)| format!("{}={}", s1, s2))
                 .collect();
             let list = list.join("\n");
-            Box::new(future::ok(Response::builder()
+            future::ok(Response::builder()
                 .status(StatusCode::UNPROCESSABLE_ENTITY)
                 .body(list.into())
-                .unwrap()))
+                .unwrap())
         },
         _ => {
-            Box::new(future::ok(Response::builder()
+            future::ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::empty())
-                .unwrap()))
+                .unwrap())
         }
     }
 }
